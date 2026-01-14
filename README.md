@@ -1,0 +1,199 @@
+[index.html.html](https://github.com/user-attachments/files/24624554/index.html.html)
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Cubo Ninja Ultra</title>
+    <style>
+        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: sans-serif; overflow: hidden; }
+        canvas { background: #1a1a2e; border: 5px solid #555; cursor: crosshair; display: block; }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// Configurações Globais
+let state = "MENU"; 
+let gold = 0;
+let score = 0;
+let player = { x: 100, y: 300, w: 40, h: 40, vy: 0, g: 0.8, onG: false };
+let enemies = [];
+let spikes = [];
+
+let weapons = [
+    { name: "Adaga", reach: 70, color: "#ffffff", price: 0, owned: true },
+    { name: "Katana", reach: 130, color: "#00ffff", price: 50, owned: false },
+    { name: "Sabre", reach: 250, color: "#ff00ff", price: 150, owned: false }
+];
+let currentWeapon = weapons[0];
+
+// Mouse
+let mouseX = 0, mouseY = 0;
+canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+});
+
+// Clique
+canvas.addEventListener("mousedown", () => {
+    if (state === "MENU") {
+        if (mouseX > 300 && mouseX < 500 && mouseY > 180 && mouseY < 230) state = "PLAYING";
+        if (mouseX > 300 && mouseX < 500 && mouseY > 250 && mouseY < 300) state = "SHOP";
+    } else if (state === "SHOP") {
+        if (mouseX > 20 && mouseX < 120 && mouseY > 20 && mouseY < 60) state = "MENU";
+        weapons.forEach((w, i) => {
+            let y = 130 + i * 70;
+            if (mouseX > 550 && mouseX < 700 && mouseY > y + 10 && mouseY < y + 50) {
+                if (w.owned) currentWeapon = w;
+                else if (gold >= w.price) { gold -= w.price; w.owned = true; currentWeapon = w; }
+            }
+        });
+    } else if (state === "DEAD") {
+        state = "MENU";
+        resetGame();
+    }
+});
+
+// Pulo
+window.addEventListener("keydown", (e) => {
+    if ((e.code === "Space" || e.code === "ArrowUp") && player.onG && state === "PLAYING") {
+        player.vy = -16;
+        player.onG = false;
+    }
+});
+
+function resetGame() {
+    player.y = 300; player.vy = 0;
+    enemies = []; spikes = []; score = 0;
+}
+
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (state === "MENU") {
+        drawTxt("CUBO NINJA", 400, 100, 60, "#fff");
+        drawTxt("MOEDAS: " + gold, 400, 150, 25, "#ffd700");
+        drawBtn(300, 180, 200, 50, "JOGAR", "#2ecc71");
+        drawBtn(300, 250, 200, 50, "LOJA", "#3498db");
+    } 
+    
+    else if (state === "SHOP") {
+        drawTxt("LOJA DE ARMAS", 400, 70, 40, "#fff");
+        drawBtn(20, 20, 100, 40, "VOLTAR", "#555");
+        weapons.forEach((w, i) => {
+            let y = 130 + i * 70;
+            ctx.fillStyle = "#222";
+            ctx.fillRect(100, y, 620, 60);
+            drawTxt(w.name + " (Alcance: " + w.reach + ")", 120, y + 38, 20, "#fff", "left");
+            let btnTxt = w.owned ? "EQUIPAR" : "CUSTA " + w.price;
+            if (currentWeapon === w) btnTxt = "USANDO";
+            drawBtn(550, y + 10, 150, 40, btnTxt, w.owned ? "#444" : "#f1c40f");
+        });
+    }
+
+    else if (state === "PLAYING") {
+        // Lógica do Player
+        player.y += player.vy;
+        player.vy += player.g;
+        if (player.y >= 340) { player.y = 340; player.vy = 0; player.onG = true; }
+
+        // Spawn de Inimigos (Raro)
+        if (Math.random() < 0.01) enemies.push({ x: 850, y: Math.random() * 200 + 100, r: 20 });
+        
+        // Spawn de Espinhos (Raro)
+        if (Math.random() < 0.008) spikes.push({ x: 850, y: 340 });
+
+        // Chão
+        ctx.fillStyle = "#555";
+        ctx.fillRect(0, 380, 800, 20);
+
+        // Desenhar Espinhos
+        ctx.fillStyle = "#ff4444";
+        for (let i = spikes.length - 1; i >= 0; i--) {
+            let s = spikes[i];
+            s.x -= 5;
+            ctx.beginPath();
+            ctx.moveTo(s.x, 380);
+            ctx.lineTo(s.x + 20, 340);
+            ctx.lineTo(s.x + 40, 380);
+            ctx.fill();
+            
+            // Colisão Espinho
+            if (player.x + 35 > s.x && player.x < s.x + 35 && player.y + 35 > 340) {
+                die();
+            }
+            if (s.x < -50) spikes.splice(i, 1);
+        }
+
+        // Inimigos
+        ctx.fillStyle = "#f00";
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            e.x -= 4;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Matar Monstro com a Espada
+            let angle = Math.atan2(mouseY - (player.y + 20), mouseX - (player.x + 20));
+            let tipX = player.x + 20 + Math.cos(angle) * currentWeapon.reach;
+            let tipY = player.y + 20 + Math.sin(angle) * currentWeapon.reach;
+            
+            let distToSwordTip = Math.hypot(tipX - e.x, tipY - e.y);
+            
+            if (distToSwordTip < 30) {
+                enemies.splice(i, 1);
+                score += 10;
+            } else if (Math.hypot(player.x + 20 - e.x, player.y + 20 - e.y) < 35) {
+                die();
+            }
+            if (e.x < -50) enemies.splice(i, 1);
+        }
+
+        // Desenhar Personagem (Bloco Azul)
+        ctx.fillStyle = "#00aaff";
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        // Desenhar Espada
+        let angle = Math.atan2(mouseY - (player.y + 20), mouseX - (player.x + 20));
+        ctx.strokeStyle = currentWeapon.color;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(player.x + 20, player.y + 20);
+        ctx.lineTo(player.x + 20 + Math.cos(angle) * currentWeapon.reach, player.y + 20 + Math.sin(angle) * currentWeapon.reach);
+        ctx.stroke();
+
+        drawTxt("PONTOS: " + score, 20, 40, 25, "#fff", "left");
+    }
+
+    else if (state === "DEAD") {
+        drawTxt("FIM DE JOGO", 400, 180, 60, "#ff4444");
+        drawTxt("CLIQUE PARA VOLTAR", 400, 240, 20, "#fff");
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+function die() { gold += score; state = "DEAD"; }
+
+function drawTxt(t, x, y, s, c, a = "center") {
+    ctx.fillStyle = c; ctx.font = "bold " + s + "px Arial"; ctx.textAlign = a;
+    ctx.fillText(t, x, y);
+}
+
+function drawBtn(x, y, w, h, t, c) {
+    ctx.fillStyle = c; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "#000"; ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
+    ctx.fillText(t, x + w / 2, y + h / 2 + 8);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
